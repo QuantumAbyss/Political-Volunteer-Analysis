@@ -1,0 +1,217 @@
+---
+title: "Political Campaign Technical Exercise"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Initialization
+```{r init, include=FALSE}
+.x <- c('dplyr', 'lubridate', 'data.table', 'ggplot2',
+        'broom', 'tidyr', 'devtools', 'glmnet')
+lapply(.x, library, character.only=T)
+devtools::install_github("dtkaplan/statisticalModeling")
+library(statisticalModeling)
+options(scipen=999)
+setwd("~/1) Projects/Political-Volunteer-Analysis/")
+```
+
+### Read in data
+```{r}
+survey <- fread("./digitalanalyticsdat (2).csv")
+
+# Data exploration
+summary(survey$birth_year)
+table(survey$gender)
+table(survey$ideology)
+table(survey$race)
+table(survey$education)
+table(survey$employed)
+table(survey$party)
+summary(survey$income_pct)
+summary(survey$activist_pct)
+table(survey$volunteer_recruit)
+```
+```{r}
+group_by(survey, volunteer_recruit) %>% 
+  summarise(activist_pct = mean(activist_pct))
+```
+
+
+### Section 1
+```{r}
+survey %>% 
+  group_by(volunteer_recruit, gender) %>%
+  summarise(count=n())
+tidy(lm(volunteer_recruit ~ gender, data=survey))
+```
+```{r}
+survey <- survey %>% 
+  mutate(age = 2016 - birth_year)
+survey %>% 
+  group_by(volunteer_recruit) %>%
+  summarise(age=mean(age))
+tidy(lm(volunteer_recruit ~ age, data=survey))
+plot(ggplot(survey, mapping=aes(x=age,color=factor(volunteer_recruit))) + geom_density())
+```
+
+```{r}
+survey %>% 
+  group_by(volunteer_recruit, race) %>%
+  summarise(count=n()) %>%
+  spread(volunteer_recruit, count) %>%
+  mutate(perc.participate = `1`/ (`1` + `0`))
+```
+```{r}
+
+ggplot(survey, mapping=aes(x=income_pct)) + geom_histogram(bins=50)
+survey %>% 
+  group_by(volunteer_recruit) %>%
+  summarise(income_pct=mean(income_pct))
+tidy(lm(volunteer_recruit ~ income_pct, data=survey))
+plot(ggplot(survey, mapping=aes(x=income_pct,color=factor(volunteer_recruit))) + geom_density())
+```
+
+
+Males appear less likely to volunteer on average, only 37.4% of males in this data set volunteered while females volunteered 50.2% of the time. Age tends to not predict whether or not someone will volunteer. Density plot shows slight increase in the likelihood someone will volunteer if they're around 30 years old. Individuals that identify as black appear to have a greater than average volunteer rate relative to other races. Income by itself does not appear to predict volunteer recruitment, linear model does not indicate significance.
+
+
+### Section 2
+```{r}
+survey %>% 
+  group_by(volunteer_recruit, ideology) %>%
+  summarise(count=n()) %>%
+  spread(volunteer_recruit, count) %>%
+  mutate(perc.participate = `1`/ (`1` + `0`))
+tidy(lm(volunteer_recruit ~ ideology, data=survey))
+plot(ggplot(survey, mapping=aes(x=ideology,color=factor(volunteer_recruit))) + geom_density())
+```
+
+
+```{r}
+survey %>% 
+  group_by(volunteer_recruit, employed) %>%
+  summarise(count=n()) %>%
+  spread(volunteer_recruit, count) %>%
+  mutate(perc.participate = `1`/ (`1` + `0`))
+tidy(lm(volunteer_recruit ~ employed, data=survey))
+plot(ggplot(survey, mapping=aes(x=employed,color=factor(volunteer_recruit))) + geom_density())
+```
+
+```{r}
+survey %>% 
+  group_by(volunteer_recruit, party) %>%
+  summarise(count=n()) %>%
+  spread(volunteer_recruit, count) %>%
+  mutate(perc.participate = `1`/ (`1` + `0`))
+tidy(lm(volunteer_recruit ~ party, data=survey))
+plot(ggplot(survey, mapping=aes(x=party,color=factor(volunteer_recruit))) + geom_density())
+```
+
+```{r}
+survey %>% 
+  group_by(volunteer_recruit) %>%
+  summarise(activist_pct=mean(activist_pct))
+tidy(lm(volunteer_recruit ~ activist_pct, data=survey))
+plot(ggplot(survey, mapping=aes(x=activist_pct,color=factor(volunteer_recruit))) + geom_density())
+```
+
+```{r}
+survey <- survey %>%
+  mutate(ideology = as.factor(ideology),
+         gender = as.factor(gender),
+         race = as.factor(race),
+         education = as.factor(education),
+         employed = as.factor(employed),
+         party = as.factor(party))
+
+interact <- tidy(lm(volunteer_recruit ~ 0 + (gender + ideology + race + education + employed + party + income_pct + activist_pct + age) ^2, data=survey))
+mod <- glm(volunteer_recruit==1 ~ 0 + (gender + ideology + race + education + employed + party + income_pct + activist_pct + age)^2, data=survey, family ="binomial")
+fmodel(mod, ~ gender + ideology + race + education, data=survey, type="response")
+fmodel(mod, ~ age + education + employed, data=survey, type="response")
+fmodel(mod, ~ income_pct + ideology + party, data=survey, type="response")
+fmodel(mod, ~ income_pct + ideology + gender, data=survey, type="response")
+fmodel(mod, ~ gender + party, data=survey, type="response")
+fmodel(mod, ~ activist_pct + party, data=survey, type="response")
+
+survey %>% 
+group_by(volunteer_recruit, ideology, party) %>%
+summarise(count=n()) %>%
+spread(volunteer_recruit, count) %>%
+mutate(perc.participate = `1`/ (`1` + `0`))
+survey %>% 
+group_by(volunteer_recruit, gender, party) %>%
+summarise(count=n()) %>%
+spread(volunteer_recruit, count) %>%
+mutate(perc.participate = `1`/ (`1` + `0`))
+
+```
+
+
+The data suggests there is a very significant correlation between volunteer recruitment and ideology. 78% of individuals identified by the "positive 1" ideology volunteered as opposed to 11% of the "negative 1" ideology and 52.7% of the "zero" ideology. Employment status by itself does not predict volunteer recruitment. This data set appears to indicate that identifying with the Democratic party (or independent/non-affiliated) greatly increases the likelihood of volunteering. This is likely due to the survey specifying that the volunteer activity supports a democratic candidate. The activist_pct variable appears not to predict a person's likelihood of volunteering. A lot of the interactive effects of certain variables compound the correlations of the single variable effects. One interesting interactive effect is the extremely high participation rate (93.8%) among individuals who associated with the "positive 1" ideology and were not affiliated with the Democratic or Republican party. This is much higher than the participation rate of Democratic voters with the same ideology. Additionally, on average women tended to volunteer more, however, this is not the case for those surveyed who identified as black, where men were slightly more likely to volunteer. Similarly, while participants with the "positive 1" ideology tended to be more likely to volunteer on average, within the group of those surveyed who identified as black, the "zero" ideology had higher participant rates. Having a higher income_pct value, increased the likelihood that a male would volunteer more so than it increased the likelihood of a female volunteer participating. Males not associated with a party were slightly more likely to participate than females. Individuals that identified with the Democratic party were significantly more likely to volunteer when they had a higher activist_pct value. These are just some of the most noticeable interactive effects that can be identified.
+
+
+
+### Section 3
+The difference between the 45% volunteer rate in this data set and the 5% from field contact indicates that volunteers are more likely to complete this survey. This indicates a degree of bias when it comes to answering the question of increasing volunteer acquisition from this data set as it seems to indicate that people who responded are more likely to be involved with or somewhat interested in politics already. In future surveys, I would recommend including a question that allows those surveyed to rate their own interest/involvement in politics on a discrete scale (e.g. "Very much not interested/involved to very interest/involved). This would allow future analyses to better control for this bias in determining areas to target for volunteer recruitment for the average population. However, given that the ultimate goal is not necessarily to motivate the average person to volunteer, but rather to maximize the number of volunteers, this data still gives valuable insights into the characteristics of an individual that will predict their likelihood of volunteering, regardless of the selection bias. 
+
+### Section 4
+```{r}
+X <- survey %>% select(-volunteer_recruit)
+lasso.fit <- cv.glmnet(data.matrix(X), survey$volunteer_recruit, alpha=1)
+coef <- predict(lasso.fit, type="nonzero")
+H <- colnames(X)[(unlist(coef))]
+H
+
+fmodel(mod, ~ ideology + race + party, data=survey, type="response")
+fmodel(mod, ~ activist_pct + party, data=survey, type="response")
+fmodel(mod, ~ ideology + party, data=survey, type="response")
+
+filter(survey, activist_pct > .9) %>% filter(party=="Dem") %>% group_by(volunteer_recruit) %>% summarise(count=n()) %>% spread(volunteer_recruit, count) %>% mutate(perc.participate = `1`/ (`1` + `0`))
+```
+
+Utilizing the activist model to target volunteers works quite well when targeting those who identify as Democrats, but could almost definitely be improved. For example, the correlation between volunteer recruitment and ideology of non-party-affiliated individuals is extremely high if there were data available to identify potential individuals associated with the "positive one" ideology. The data indicates 93.8% recruitment rate among those individuals compared to the 80.8% recruitment rate among those who identify as Democrats and have an activist_pct greater than .9.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
